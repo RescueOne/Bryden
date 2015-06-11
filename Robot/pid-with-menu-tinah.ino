@@ -39,7 +39,7 @@ MenuItem Speed            = MenuItem("Speed");
 MenuItem ProportionalGain = MenuItem("P-gain");
 MenuItem DerivativeGain   = MenuItem("D-gain");
 MenuItem IntegralGain     = MenuItem("I-gain");
-MenuItem menuItems[]      = {Speed, ProportionalGain, DerivativeGain};
+MenuItem menuItems[]      = {Speed, ProportionalGain, DerivativeGain, IntegralGain};
 
 /* Set up TINAH Board */
 void setup()
@@ -58,6 +58,7 @@ int I_gain = 0;
 int D_gain = 0;
 int proportional = 0;
 int derivative = 0;
+int integral = 0;
 int compensator = 0; // what we need to adjust our speed by in order to fix the tape following
 
 // QRD setup
@@ -71,13 +72,15 @@ int threshold; // threshold analog value reading
 int error = 0;
 int last_error = 0;
 int recent_error = 0;
+int sum_error = 0;
+int last2_error = 0;
 int current_duration = 0;
 int previous_duration = 0;
 int qrd_seperation = 5; // distance between qrd's
 
 // Motor
-int motor_left = 3;
-int motor_right = 4;
+int motor_left = 2;
+int motor_right = 3;
 int motor_speed = 0;
 
 void loop()
@@ -102,7 +105,7 @@ void loop()
       	        LCD.print("Press stop to exit!");
                 
                 // control theory code:
-                PID();
+                //PID();
                 
                 // Used for testing QRDs
                 while(!stopbutton())
@@ -113,8 +116,12 @@ void loop()
                       LCD.print(qrd_left);
                       LCD.setCursor(0, 1);
                       LCD.print(qrd_right);
+//                      motor.speed(motor_left,-100);
+//                      motor.speed(motor_right,100);
                       delay(100);
                 }
+                motor.speed(motor_left,0);
+                motor.speed(motor_right,0);
         }
 }
 
@@ -126,6 +133,7 @@ void PID()
      motor_speed = menuItems[0].Value;
      P_gain = menuItems[1].Value;
      D_gain = menuItems[2].Value;
+     I_gain = menuItems[3].Value;
      
      error = 0;
      
@@ -176,8 +184,29 @@ void PID()
          // Problems: in 2 iterations if error != last_error, the 2nd time the run = 2
          derivative = (int) ( (float) D_gain * (float) (error + recent_error) / ( (float) (previous_duration + current_duration) ) );
          
+         // Other implementation
+         // derivative = D_gain * (error - last_error)
+         
+         sum_error += error;
+         integral = I_gain * sum_error;
+         
+         // to prevent the integral error from getting too large
+         if (sum_error > qrd_seperation)
+         {
+               sum_error = 5; 
+         }
+         if (sum_error < -qrd_seperation)
+         {
+               sum_error = -5; 
+         }
+         
+         /*
+         Complex Algorithm
+         compensator = ( P_gain + I_gain + D_gain ) * ( error - last_error + I_gain * current_duration * error + ( (float) D_gain / (float) current_duration ) * (error - 2 * last_error + last2_error);
+         */
+         
          // set compensator function = P + D
-         compensator =  proportional + derivative;
+         compensator =  proportional + derivative + integral;
          
          // Display current status
          if( count == 50)
@@ -195,6 +224,7 @@ void PID()
          // increment iterations and set last error
          current_duration++;
          last_error = error;
+         //last2_error = last_error;
      }
      
      delay(100);
